@@ -1,1 +1,57 @@
+name: CI/CD Pipeline
 
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar o repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar ambiente Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Rodar testes automatizados
+        run: |
+          pytest
+
+      - name: Executar script de dados
+        run: |
+          python app/pipeline.py
+
+      - name: Salvar arquivo gerado como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-summary
+          path: output/summary.csv
+          if-no-files-found: ignore
+
+      - name: Notificar API externa
+        if: env.CI_API_URL != ''
+        env:
+          CI_API_URL: ${{ secrets.CI_API_URL }}
+          CI_API_TOKEN: ${{ secrets.CI_API_TOKEN }}
+        run: |
+          curl -X POST "$CI_API_URL" \
+            -H "Authorization: Bearer $CI_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"status": "success", "repository": "${{ github.repository }}", "commit": "${{ github.sha }}"}'
